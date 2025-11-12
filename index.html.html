@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Dividend Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* ---- Subtle active tab glow ---- */
+    .tab-btn { transition: all .25s ease; }
+    .tab-active{
+      background: rgba(56,189,248,0.12);
+      color: #8bd5ff;
+      box-shadow:
+        0 0 0 1px rgba(56,189,248,0.45),
+        0 8px 22px rgba(56,189,248,0.18),
+        0 0 28px rgba(56,189,248,0.22) inset;
+    }
+
+    /* ---- Fade + slide-up animation for panels ---- */
+    .panel{ will-change: opacity, transform; }
+    .fade-up-enter{ opacity: 0; transform: translateY(10px); }
+    .fade-up-enter-active{ opacity: 1; transform: translateY(0); transition: all .28s ease; }
+    .fade-up-exit{ opacity: 1; transform: translateY(0); }
+    .fade-up-exit-active{ opacity: 0; transform: translateY(6px); transition: all .22s ease; }
+
+    /* ---- Sort indicators ---- */
+    .sortable{ cursor:pointer; user-select:none; }
+    .sort-ind{ opacity:.7; margin-left:.35rem; }
+
+    /* ---- Inline native date input (popup) ---- */
+    .date-inline {
+      position: absolute; z-index: 60; width: 14rem;
+      background: #0B1220; color: #e2e8f0;
+      border: 1px solid rgba(56,189,248,0.45);
+      box-shadow: 0 10px 24px rgba(0,0,0,.45), 0 0 0 1px rgba(148,163,184,.12) inset;
+      border-radius: 10px; padding: .35rem .5rem;
+      outline: none; transition: opacity .3s ease, transform .3s ease;
+      opacity: 0; transform: translateY(6px);
+    }
+    .date-inline.show { opacity: 1; transform: translateY(0); }
+    .date-inline::-webkit-calendar-picker-indicator { filter: invert(1) hue-rotate(180deg) saturate(1.2); }
+    .date-inline:focus { box-shadow: 0 0 0 2px rgba(56,189,248,0.35); }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-[#0B1220] via-[#0A0F1A] to-[#06080F] text-gray-100">
+  <!-- Header -->
+  <header class="sticky top-0 z-20 backdrop-blur supports-[backdrop-filter]:bg-black/30 border-b border-white/10">
+    <div class="max-w-5xl mx-auto px-4 py-5">
+      <h1 class="text-3xl font-bold tracking-tight flex items-center gap-3">
+        <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10 ring-1 ring-sky-400/30">💹</span>
+        My Dividend Tracker
+      </h1>
+
+      <!-- Tabs -->
+      <div class="relative mt-5">
+        <div id="tabs" class="inline-flex gap-1 rounded-2xl p-1 bg-white/5 ring-1 ring-white/10">
+          <button id="tab-calculator" class="tab-btn px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/10" data-tab="calculator">Calculator</button>
+          <button id="tab-tracker" class="tab-btn px-4 py-2 rounded-xl text-sm font-medium hover:bg-white/10" data-tab="tracker">Income Tracker</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-5xl mx-auto px-4 py-8 space-y-8">
+
+    <!-- Calculator -->
+    <section id="panel-calculator" class="panel">
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
+        <h2 class="text-lg font-semibold mb-4">Dividend Calculator</h2>
+        <form id="calc-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Stock Name</label>
+            <input id="calc-name" type="text" placeholder="e.g., BPCL" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 placeholder-gray-500" required />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Stock Price (₹)</label>
+            <input id="calc-price" type="number" step="0.01" min="0" placeholder="e.g., 320" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 placeholder-gray-500" required />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Amount Invested (₹)</label>
+            <input id="calc-amount" type="number" step="0.01" min="0" placeholder="e.g., 100000" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 placeholder-gray-500" required />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Dividend / Share (₹)</label>
+            <input id="calc-dps" type="number" step="0.01" min="0" placeholder="e.g., 7.5" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 placeholder-gray-500" required />
+          </div>
+          <div class="md:col-span-4 flex flex-wrap gap-3 mt-2">
+            <button type="submit" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white">Calculate Dividend</button>
+            <button type="button" id="calc-add-to-tracker" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white" disabled>Add to Dividend Income</button>
+            <p id="calc-output" class="text-base font-semibold ml-auto">Expected Dividend: <span class="text-sky-300">₹0.00</span></p>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Income Tracker -->
+    <section id="panel-tracker" class="panel hidden">
+      <div class="rounded-2xl border border-white/10 bg-white/5 p-6 relative">
+        <h2 class="text-lg font-semibold mb-4">Income Tracker</h2>
+        <form id="stock-form" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Stock Name</label>
+            <input id="stock-name" type="text" placeholder="e.g., TCS" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 placeholder-gray-500" required />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">No. of Shares</label>
+            <input id="stock-shares" type="number" step="0.0001" min="0" placeholder="e.g., 25" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 placeholder-gray-500" required />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Dividend / Share (₹)</label>
+            <input id="stock-dps" type="number" step="0.01" min="0" placeholder="e.g., 12" class="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 placeholder-gray-500" required />
+          </div>
+          <div>
+            <button type="submit" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white w-full">Add Stock</button>
+          </div>
+        </form>
+
+        <div class="mt-6 overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-white/5 text-gray-300 uppercase text-xs">
+              <tr>
+                <th class="text-left px-4 py-3 sortable" data-sort="name">Stock Name <span class="sort-ind"></span></th>
+                <th class="text-right px-4 py-3 sortable" data-sort="shares">No. of Shares <span class="sort-ind"></span></th>
+                <th class="text-right px-4 py-3 sortable" data-sort="dps">Dividend/Share (₹) <span class="sort-ind"></span></th>
+                <th class="text-right px-4 py-3 sortable" data-sort="amount">Amount (₹) <span class="sort-ind"></span></th>
+                <th class="text-center px-4 py-3 sortable" data-sort="date">Ex Date <span class="sort-ind"></span></th>
+                <th class="text-center px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="table-body" class="divide-y divide-white/5"></tbody>
+          </table>
+        </div>
+
+        <!-- container for inline date input (created dynamically) -->
+        <div id="date-holder"></div>
+
+        <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+            <p class="text-xs text-gray-400">Holdings</p>
+            <p id="summary-count" class="text-2xl font-semibold">0</p>
+          </div>
+          <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+            <p class="text-xs text-gray-400">Total Dividend Income (<span id="fy-label"></span>)</p>
+            <p id="summary-total" class="text-2xl font-semibold">₹0.00</p>
+          </div>
+          <div class="rounded-xl bg-white/5 border border-white/10 p-4">
+            <p class="text-xs text-gray-400">Current Quarter</p>
+            <p id="summary-quarter" class="text-2xl font-semibold">Q1: ₹0.00</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    const INR = n => '₹' + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const todayStr = () => new Date().toLocaleDateString('en-GB').split('/').join('-');
+    const STORAGE_KEY = 'dividendDataV6';
+
+    // ---- State helpers ----
+    const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+    let items = (JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')).map(it => ({ id: it.id || uid(), ...it }));
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
+    const findIndexById = (id) => items.findIndex(x => x.id === id);
+
+    // ---- Tabs + animation ----
+    const tabCalc = document.getElementById('tab-calculator');
+    const tabTrack = document.getElementById('tab-tracker');
+    const panelCalc = document.getElementById('panel-calculator');
+    const panelTrack = document.getElementById('panel-tracker');
+
+    function animateSwap(hideEl, showEl){
+      hideEl.classList.remove('fade-up-enter','fade-up-enter-active');
+      hideEl.classList.add('fade-up-exit');
+      requestAnimationFrame(()=>{
+        hideEl.classList.add('fade-up-exit-active');
+        hideEl.addEventListener('transitionend', ()=>{
+          hideEl.classList.add('hidden');
+          hideEl.classList.remove('fade-up-exit','fade-up-exit-active');
+          showEl.classList.remove('hidden');
+          showEl.classList.add('fade-up-enter');
+          requestAnimationFrame(()=> showEl.classList.add('fade-up-enter-active'));
+        }, { once:true });
+      });
+    }
+
+    function showPanel(which){
+      if(which==='calculator'){
+        tabCalc.classList.add('tab-active');
+        tabTrack.classList.remove('tab-active');
+        if(panelTrack.classList.contains('hidden')) return;
+        animateSwap(panelTrack, panelCalc);
+      }else{
+        tabTrack.classList.add('tab-active');
+        tabCalc.classList.remove('tab-active');
+        if(panelCalc.classList.contains('hidden')) return;
+        animateSwap(panelCalc, panelTrack);
+      }
+    }
+
+    tabCalc.addEventListener('click', ()=> showPanel('calculator'));
+    tabTrack.addEventListener('click', ()=> showPanel('tracker'));
+
+    // initial
+    tabCalc.classList.add('tab-active');
+    panelCalc.classList.add('fade-up-enter');
+    requestAnimationFrame(()=> panelCalc.classList.add('fade-up-enter-active'));
+
+    // ---- Calculator ----
+    const calcForm = document.getElementById('calc-form');
+    const calcName = document.getElementById('calc-name');
+    const calcPrice = document.getElementById('calc-price');
+    const calcAmount = document.getElementById('calc-amount');
+    const calcDps = document.getElementById('calc-dps');
+    const calcOut = document.querySelector('#calc-output span');
+    const calcAdd = document.getElementById('calc-add-to-tracker');
+
+    calcForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const name = calcName.value.trim();
+      const price = +calcPrice.value; const amount = +calcAmount.value; const dps = +calcDps.value;
+      if(!name || !(price>0) || !(amount>0) || !(dps>=0)) return;
+      const shares = amount / price;
+      const dividend = shares * dps;
+      calcOut.textContent = INR(dividend);
+      lastCalc = { id: uid(), name, shares: Math.round(shares*10000)/10000, dps, date: todayStr() };
+      calcAdd.disabled = false;
+    });
+
+    calcAdd.addEventListener('click', ()=>{
+      if(!lastCalc) return;
+      items.push(lastCalc);
+      save();
+      render();
+      showPanel('tracker');
+    });
+
+    // ---- Tracker add/edit ----
+    const stockForm = document.getElementById('stock-form');
+    const stockName = document.getElementById('stock-name');
+    const stockShares = document.getElementById('stock-shares');
+    const stockDps = document.getElementById('stock-dps');
+    let editingId = null;
+
+    stockForm.addEventListener('submit', e=>{
+      e.preventDefault();
+      const name = stockName.value.trim();
+      const shares = +stockShares.value; const dps = +stockDps.value;
+      if(!name || !(shares>0) || !(dps>=0)) return;
+      if(editingId){
+        const idx = findIndexById(editingId);
+        if(idx>-1){ items[idx] = { ...items[idx], name, shares: Math.round(shares*10000)/10000, dps }; }
+        editingId = null;
+      } else {
+        items.push({ id: uid(), name, shares: Math.round(shares*10000)/10000, dps, date: todayStr() });
+      }
+      save();
+      render();
+      stockForm.reset();
+    });
+
+    // ---- FY / Quarter ----
+    function getFYLabel(){
+      const now = new Date();
+      const y = now.getFullYear();
+      const fyStart = (now.getMonth()+1) >= 4 ? y : y-1;
+      return `FY${String(fyStart).slice(2)}-${String(fyStart+1).slice(2)}`;
+    }
+    function quarterFromMonth(m){
+      if(m>=4 && m<=6) return 'Q1';
+      if(m>=7 && m<=9) return 'Q2';
+      if(m>=10 && m<=12) return 'Q3';
+      return 'Q4';
+    }
+
+    // ---- Sorting ----
+    let sortState = { key: 'date', dir: 'desc' };
+    const thead = document.querySelector('thead');
+
+    thead.addEventListener('click', (e)=>{
+      const th = e.target.closest('[data-sort]');
+      if(!th) return;
+      const key = th.getAttribute('data-sort');
+      if(sortState.key === key){ sortState.dir = (sortState.dir==='asc'?'desc':'asc'); }
+      else { sortState.key = key; sortState.dir = 'asc'; }
+      render();
+    });
+
+    function compare(a,b){
+      const dir = sortState.dir==='asc'?1:-1;
+      const key = sortState.key;
+      let va, vb;
+      if(key==='amount'){ va = a.shares*a.dps; vb = b.shares*b.dps; }
+      else if(key==='name'){ va = (a.name||'').toLowerCase(); vb = (b.name||'').toLowerCase(); }
+      else if(key==='shares' || key==='dps'){ va = a[key]; vb = b[key]; }
+      else if(key==='date'){
+        const pa = (a.date||'01-01-1970').split('-').reverse().join('-');
+        const pb = (b.date||'01-01-1970').split('-').reverse().join('-');
+        va = pa; vb = pb;
+      }
+      if(va<vb) return -1*dir; if(va>vb) return 1*dir; return 0;
+    }
+
+    function updateSortIndicators(){
+      document.querySelectorAll('th[data-sort] .sort-ind').forEach(el=> el.textContent='');
+      const active = document.querySelector(`th[data-sort="${sortState.key}"] .sort-ind`);
+      if(active) active.textContent = sortState.dir==='asc' ? '▲' : '▼';
+    }
+
+    // ---- Inline native date input (exactly below cell) ----
+    let inlineDateEl = null; let inlineTargetBtn = null; let inlineId = null;
+
+    function closeInlineDate(){
+      if(!inlineDateEl) return;
+      inlineDateEl.classList.remove('show');
+      setTimeout(()=>{ inlineDateEl.remove(); inlineDateEl=null; inlineTargetBtn=null; inlineId=null; }, 150);
+      document.removeEventListener('mousedown', handleOutsideClick, true);
+    }
+
+    function handleOutsideClick(ev){
+      if(inlineDateEl && !inlineDateEl.contains(ev.target) && ev.target!==inlineTargetBtn){ closeInlineDate(); }
+    }
+
+    function openInlineDateFor(btn, id){
+      closeInlineDate();
+      inlineTargetBtn = btn; inlineId = id;
+
+      // Create input
+      inlineDateEl = document.createElement('input');
+      inlineDateEl.type = 'date';
+      inlineDateEl.className = 'date-inline';
+
+      // Position below the button cell
+      const rect = btn.getBoundingClientRect();
+      inlineDateEl.style.left = (rect.left + window.scrollX) + 'px';
+      inlineDateEl.style.top  = (rect.bottom + window.scrollY + 6) + 'px';
+
+      // Preload current value in YYYY-MM-DD
+      const item = items[findIndexById(id)];
+      const [dd,mm,yyyy] = (item.date || todayStr()).split('-');
+      inlineDateEl.value = `${yyyy}-${mm}-${dd}`; // native expects yyyy-mm-dd
+
+      document.body.appendChild(inlineDateEl);
+      requestAnimationFrame(()=> inlineDateEl.classList.add('show'));
+
+      // Auto-open picker if supported
+      inlineDateEl.focus({ preventScroll:true });
+      setTimeout(()=>{ if(inlineDateEl && inlineDateEl.showPicker) inlineDateEl.showPicker(); }, 30);
+
+      // Close on outside click
+      document.addEventListener('mousedown', handleOutsideClick, true);
+
+      // Save on change
+      inlineDateEl.addEventListener('change', ()=>{
+        const v = inlineDateEl.value; // yyyy-mm-dd
+        if(v){
+          const [y,m,d] = v.split('-');
+          const idx = findIndexById(id);
+          if(idx>-1){ items[idx].date = `${d}-${m}-${y}`; save(); render(); }
+        }
+        closeInlineDate(); // auto-close after choose
+      }, { once:true });
+
+      // Also close on blur if user cancels
+      inlineDateEl.addEventListener('blur', ()=>{ setTimeout(closeInlineDate, 120); }, { once:true });
+    }
+
+    // ---- Render ----
+    const tableBody = document.getElementById('table-body');
+    const summaryCount = document.getElementById('summary-count');
+    const summaryTotal = document.getElementById('summary-total');
+    const summaryQuarter = document.getElementById('summary-quarter');
+    const fyLabel = document.getElementById('fy-label');
+
+    function render(){
+      fyLabel.textContent = getFYLabel();
+      tableBody.innerHTML = '';
+
+      const arr = items.slice().sort(compare);
+      let total = 0, qTotal = 0;
+      const now = new Date();
+      const currentQ = quarterFromMonth(now.getMonth()+1);
+
+      arr.forEach(it => {
+        const amount = Number(it.shares) * Number(it.dps);
+        total += amount;
+        const [dd,mm,yy] = (it.date||'01-04-1970').split('-').map(Number);
+        if(quarterFromMonth(mm) === currentQ) qTotal += amount;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class='px-4 py-3'>${it.name}</td>
+          <td class='px-4 py-3 text-right'>${it.shares}</td>
+          <td class='px-4 py-3 text-right'>₹${it.dps}</td>
+          <td class='px-4 py-3 text-right'>₹${amount.toFixed(2)}</td>
+          <td class='px-4 py-3 text-center'>
+            <button class='exdate-btn px-2 py-1 rounded-lg hover:bg-white/10 text-sky-200 ring-1 ring-white/10' data-id='${it.id}'>${it.date || ''}</button>
+          </td>
+          <td class='px-4 py-3 text-center'>
+            <button data-edit='${it.id}' class='text-emerald-400 hover:underline mr-3'>Edit</button>
+            <button data-del='${it.id}' class='text-rose-400 hover:underline'>Delete</button>
+          </td>`;
+        tableBody.appendChild(tr);
+      });
+
+      summaryCount.textContent = items.length;
+      summaryTotal.textContent = INR(total);
+      summaryQuarter.textContent = `${currentQ}: ${INR(qTotal)}`;
+
+      updateSortIndicators();
+
+      // Hook Ex Date buttons
+      tableBody.querySelectorAll('.exdate-btn').forEach(btn => {
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          openInlineDateFor(btn, btn.getAttribute('data-id'));
+        });
+      });
+    }
+
+    // ---- Row actions ----
+    tableBody.addEventListener('click', e=>{
+      const delId = e.target.dataset.del;
+      const editId = e.target.dataset.edit;
+      if(delId){
+        const idx = findIndexById(delId); if(idx>-1){ items.splice(idx,1); save(); render(); }
+      } else if(editId){
+        const idx = findIndexById(editId); if(idx>-1){
+          const it = items[idx];
+          stockName.value = it.name; stockShares.value = it.shares; stockDps.value = it.dps;
+          editingId = it.id;
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }
+    });
+
+    function updateSortIndicators(){
+      document.querySelectorAll('th[data-sort] .sort-ind').forEach(el=> el.textContent='');
+      const active = document.querySelector(`th[data-sort="${sortState.key}"] .sort-ind`);
+      if(active) active.textContent = sortState.dir==='asc' ? '▲' : '▼';
+    }
+
+    // First render
+    render();
+  </script>
+</body>
+</html>
